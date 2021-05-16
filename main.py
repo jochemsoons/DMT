@@ -36,13 +36,13 @@ def main(args):
         df_train, df_test = load_data()
     # Print statistics of train dataset.
     # print_statistics(df_train)
-
-    df_train = df_train[:100000]
-    df_test = df_test[:100000]
-
+    
+    # df_train = df_train[:100000]
+    # df_test = df_test[:100000]
     if 'score' not in df_train.columns:
         add_score_column(df_train)
         pdump(df_train,'df_train')
+
     if args.load_subsets:
         X_train, y_train, qids_train, X_val, y_val, qids_val = load_subsets()
         X_test = pload('X_test')

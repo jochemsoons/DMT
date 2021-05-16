@@ -116,7 +116,6 @@ def split_df(df, subset):
 def create_train_val_data(df, feature_engineering, split_ratio=0.80):
     if feature_engineering:
         add_features(df)
-    # preprocess_data(df)
     srch_ids = df['srch_id'].unique()
     random.shuffle(srch_ids)
     split_index = round(split_ratio * len(srch_ids))

@@ -13,10 +13,14 @@ import random
 
 
 def pdump(values, filename, dirname='./pickle_dumps/') :
+    if not os.path.exists(dirname):
+        os.makedirs(dirname)
     print("Dumping " + filename)
     pickle.dump(values, open(os.path.join(dirname + filename + '_pdump.pkl'), 'wb'))
 
 def pload(filename, dirname='./pickle_dumps/') :
+    if not os.path.exists(dirname):
+        os.makedirs(dirname)
     file = os.path.join(dirname + filename + '_pdump.pkl')
     if not os.path.isfile(file) :
         raise FileNotFoundError(file + " doesn't exist")
