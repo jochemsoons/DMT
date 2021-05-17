@@ -37,8 +37,10 @@ def add_score_column(df):
     return df
 
 def add_statistics_num_features(df_train, df_test):
+    print("Adding mean, median and std features. for numeric features...")
     combined_data = pd.concat([df_train, df_test], copy=False)
     numeric_features = ["position", "prop_starrating", "prop_review_score", "prop_location_score1", "prop_location_score2"]
+    print("Numeric features used:", numeric_features)
     for feature in numeric_features:
         mean = combined_data.groupby("prop_id")[feature].mean().fillna(value=-1)
         median = combined_data.groupby("prop_id")[feature].median().fillna(value=-1)
@@ -50,32 +52,45 @@ def add_statistics_num_features(df_train, df_test):
             df[feature + "_std"] = std[df.prop_id].values
     return df_train, df_test
 
-def add_proba_features(df_train, df_test):
-    combined_data = pd.concat([df_train, df_test], copy=False)
-    # print(combined_data)
-    # rows = combined_data.loc[(combined_data['prop_id']==893)]
-    print(rows)
-    print(rows['booking_bool'])
+def add_probability_features(df_train, df_test):
+    print("Adding booking and click probability features...")
+    df_train['book_probability'] = df_train.groupby("prop_id")['booking_bool'].transform('sum') / df_train.groupby("prop_id")['prop_id'].transform('count')
+    df_train['click_probability'] = df_train.groupby("prop_id")['click_bool'].transform('sum') / df_train.groupby("prop_id")['prop_id'].transform('count')
+    
+    test_prop_ids = np.array(df_test['prop_id'])
+    train_prop_ids = np.array(df_train['prop_id'])       
 
+    df_test['book_probability'] = [df_train.loc[(df_train['prop_id']==p_id)].book_probability.iloc[0] if p_id in train_prop_ids else 0 for p_id in test_prop_ids]
+    df_test['click_probability'] = [df_train.loc[(df_train['prop_id']==p_id)].click_probability.iloc[0] if p_id in train_prop_ids else 0 for p_id in test_prop_ids]
+    return df_train, df_test
 
-    print(combined_data['prop_id'] == 893)
-    print(combined_data.groupby("prop_id")['booking_bool'].transform('count'))
-    print(combined_data.groupby("prop_id")['prop_id'].transform('count'))
-    df_train['book_probability'] = df_train.groupby("prop_id")['booking_bool'].transform('count') / df_train.groupby("prop_id")['prop_id'].transform('count')
-    print(df_train)
-    print(len(booked_count))
-
-
-def add_features(df):
-    df['starrating_diff'] = abs(df['visitor_hist_starrating'] - df['prop_starrating'])
-    # Add more (composite) features
-    # df['occurences'] = 
-    return df
+def add_composite_features(df_train, df_test):
+    for df in (df_train, df_test):
+        p_id = 29604
+        df['starrating_diff'] = abs(df['visitor_hist_starrating'] - df['prop_starrating'])
+        df['usd_diff'] = abs(df["visitor_hist_adr_usd"] - df["price_usd"])
+        df['star_review_diff'] = abs(df["prop_review_score"] - df["prop_starrating"])
+        df['price_order'] = df.groupby("prop_id")["price_usd"].transform('rank')
+        hist_price_normal = np.exp(df['prop_log_historical_price'])
+        df['price_diff_recent'] = abs(df['price_usd'] - hist_price_normal)
+    return df_train, df_test
 
 
 def preprocess_data(df):
-    # Remove date_time
-    df.drop('date_time', axis = 1, inplace = True)
+    to_drop = [
+        'date_time',
+        'site_id',
+        'visitor_location_country_id',
+        # 'visitor_hist_adr_usd',
+        'prop_country_id',
+        #'prop_id',
+        #'prop_brand_bool',
+        #'promotion_flag',
+        'srch_destination_id',
+        #'random_bool',
+    ]
+    # Remove columns
+    df.drop(to_drop, axis = 1, inplace = True)
     # Winsorize price values
     # print('max before:', np.max(df['price_usd'] ))
     df['price_usd'] = winsorize(df['price_usd'], (None, 0.03))
@@ -103,19 +118,18 @@ def preprocess_data(df):
 
 def split_df(df, subset):
     qids = df['srch_id']
-    df.drop(['srch_id'], axis=1, inplace = True)
+    df.sort_values(by=['srch_id'])
+    # df.drop(['srch_id'], axis=1, inplace = True)
     if subset == 'train':
         labels = df['score']
         df.drop(['score', 'booking_bool','click_bool', 'position','gross_bookings_usd'], axis = 1, inplace = True)
         df.drop(['prop_id'], axis = 1, inplace = True)
-        return np.asarray(df), labels, qids
+        return np.asarray(df, dtype=np.float64), np.asarray(labels, dtype=np.int64), np.asarray(qids, dtype=np.int64)
     else:
         df.drop(['prop_id'], axis = 1, inplace = True)
-        return np.asarray(df), qids
+        return np.asarray(df, dtype=np.float64), np.asarray(qids, dtype=np.int64)
 
-def create_train_val_data(df, feature_engineering, split_ratio=0.80):
-    if feature_engineering:
-        add_features(df)
+def create_train_val_data(df, split_ratio=0.80):
     srch_ids = df['srch_id'].unique()
     random.shuffle(srch_ids)
     split_index = round(split_ratio * len(srch_ids))
@@ -137,9 +151,7 @@ def create_train_val_data(df, feature_engineering, split_ratio=0.80):
 
     return X_train, y_train, qids_train, X_val, y_val, qids_val
 
-def create_test_data(df, feature_engineering):
-    if feature_engineering:
-        add_features(df)
+def create_test_data(df):
     X_test, qids_test = split_df(df, subset='test')
     pdump(X_test, 'X_test')
     pdump(qids_test, 'qids_test')
