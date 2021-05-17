@@ -126,8 +126,9 @@ def split_df(df, subset):
         df.drop(['prop_id'], axis = 1, inplace = True)
         return np.asarray(df, dtype=np.float64), np.asarray(labels, dtype=np.int64), np.asarray(qids, dtype=np.int64)
     else:
+        prop_ids = df['prop_id']
         df.drop(['prop_id'], axis = 1, inplace = True)
-        return np.asarray(df, dtype=np.float64), np.asarray(qids, dtype=np.int64)
+        return np.asarray(df, dtype=np.float64), np.asarray(qids, dtype=np.int64), np.asarray(prop_ids, dtype=np.int64) 
 
 def create_train_val_data(df, split_ratio=0.80):
     srch_ids = df['srch_id'].unique()
@@ -152,7 +153,8 @@ def create_train_val_data(df, split_ratio=0.80):
     return X_train, y_train, qids_train, X_val, y_val, qids_val
 
 def create_test_data(df):
-    X_test, qids_test = split_df(df, subset='test')
+    X_test, qids_test, prop_ids_test = split_df(df, subset='test')
     pdump(X_test, 'X_test')
     pdump(qids_test, 'qids_test')
-    return X_test, qids_test
+    pdump(prop_ids_test, 'prop_ids_test')
+    return X_test, qids_test, prop_ids_test

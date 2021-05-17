@@ -29,6 +29,7 @@ def pload(filename, dirname='./pickle_dumps/') :
 
 # Function for setting the seed
 def set_seed(seed):
+    print("Setting seed:", seed)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
