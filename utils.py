@@ -8,7 +8,7 @@ import datetime
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn import preprocessing
-import torch
+# import torch
 import random
 
 
@@ -32,10 +32,10 @@ def set_seed(seed):
     print("Setting seed:", seed)
     random.seed(seed)
     np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available(): # GPU operation have separate seed
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
+    # torch.manual_seed(seed)
+    # if torch.cuda.is_available(): # GPU operation have separate seed
+        # torch.cuda.manual_seed(seed)
+        # torch.cuda.manual_seed_all(seed)
 
 def load_subsets():
     X_train = pload('X_train')

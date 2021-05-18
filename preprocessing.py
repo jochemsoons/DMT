@@ -37,7 +37,7 @@ def add_score_column(df):
     return df
 
 def add_statistics_num_features(df_train, df_test):
-    print("Adding mean, median and std features. for numeric features...")
+    print("Adding mean, median and std for numeric features...")
     combined_data = pd.concat([df_train, df_test], copy=False)
     numeric_features = ["position", "prop_starrating", "prop_review_score", "prop_location_score1", "prop_location_score2"]
     print("Numeric features used:", numeric_features)
@@ -57,12 +57,37 @@ def add_probability_features(df_train, df_test):
     df_train['book_probability'] = df_train.groupby("prop_id")['booking_bool'].transform('sum') / df_train.groupby("prop_id")['prop_id'].transform('count')
     df_train['click_probability'] = df_train.groupby("prop_id")['click_bool'].transform('sum') / df_train.groupby("prop_id")['prop_id'].transform('count')
     
-    test_prop_ids = np.array(df_test['prop_id'])
-    train_prop_ids = np.array(df_train['prop_id'])       
+    # test_prop_ids = np.array(df_test['prop_id'])
+    # train_prop_ids = np.array(df_train['prop_id'])       
+    # common_ids = np.intersect1d(test_prop_ids, train_prop_ids)
 
-    df_test['book_probability'] = [df_train.loc[(df_train['prop_id']==p_id)].book_probability.iloc[0] if p_id in train_prop_ids else 0 for p_id in test_prop_ids]
-    df_test['click_probability'] = [df_train.loc[(df_train['prop_id']==p_id)].click_probability.iloc[0] if p_id in train_prop_ids else 0 for p_id in test_prop_ids]
+
+    train_book_prob = df_train[["prop_id", "book_probability"]].drop_duplicates()
+    train_click_prob = df_train[["prop_id", "click_probability"]].drop_duplicates()
+    
+    # print(df_test['prop_id'])
+    # print(df_test.loc[(df_test['prop_id']==81762)])
+    df_test = pd.merge(df_test, train_book_prob, on='prop_id', how='left')
+    print("MERGE 1 COMPLETE")
+    # print(df_test)
+    # df_test = df_test.drop_duplicates()
+    df_test = pd.merge(df_test, train_click_prob, on='prop_id', how='left')
+    print("MERGE 2 COMPLETE")
+    # print(df_test)
+    # df_test = df_test.drop_duplicates()
+    # print("DROP DUPLICATES")
+
+    # df_test = df_test.reset_index(drop=True)
+    # print(df_train.loc[(df_train['prop_id']==81762)])
+    # print(df_test.loc[(df_test['prop_id']==81762)])
+    # print(df_test)
+    df_test.book_probability.fillna(0, inplace = True)
+    df_test.click_probability.fillna(0, inplace = True)
+    # exit()
     return df_train, df_test
+    # df_test['book_probability'] = [df_train.loc[(df_train['prop_id']==p_id)].book_probability.iloc[0] if p_id in common_ids else 0 for p_id in test_prop_ids]
+    # df_test['click_probability'] = [df_train.loc[(df_train['prop_id']==p_id)].click_probability.iloc[0] if p_id in common_ids else 0 for p_id in test_prop_ids]
+    # return df_train, df_test
 
 def add_composite_features(df_train, df_test):
     for df in (df_train, df_test):

@@ -6,9 +6,9 @@ import datetime
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn import preprocessing
-import torch
-from LambdaRankNN import LambdaRankNN
-import xgboost as xgb
+# import torch
+# from LambdaRankNN import LambdaRankNN
+# import xgboost as xgb
 import lightgbm
 
 
@@ -41,29 +41,31 @@ def main(args):
         except:
             df_train, df_test = load_data()
         # Print statistics of train dataset.
-        # print_statistics(df_train)
+        # df_train = df_train
+        # df_test = df_test
         if 'score' not in df_train.columns:
             add_score_column(df_train)
-            pdump(df_train,'df_train')
+            pdump(df_train,'df_train') 
 
-    if args.load_subsets:
-        print("Loading subsets...")
-        X_train, y_train, qids_train, X_val, y_val, qids_val = load_subsets()
-        X_test = pload('X_test')
-        qids_test = pload('qids_test')
-        prop_ids_test = pload('prop_ids_test')
-    else:
         print("Preprocessing datasets...")
         preprocess_data(df_train), preprocess_data(df_test)
         if args.add_proba_features:
-            add_probability_features(df_train, df_test)
+            df_train, df_test = add_probability_features(df_train, df_test)
         if args.add_stats_features:
             add_statistics_num_features(df_train, df_test)
         if args.add_comp_features:
             add_composite_features(df_train, df_test)
         X_train, y_train, qids_train, X_val, y_val, qids_val = create_train_val_data(df_train)
         X_test, qids_test, prop_ids_test = create_test_data(df_test)
-    
+
+    elif args.load_subsets:
+        print("Loading subsets...")
+        X_train, y_train, qids_train, X_val, y_val, qids_val = load_subsets()
+        X_test = pload('X_test')
+        qids_test = pload('qids_test')
+        prop_ids_test = pload('prop_ids_test')      
+
+    print("#" * 80)
     print("Shape of train set: ", X_train.shape)
     print("Shape of val set: ", X_val.shape)
     print("Shape of test set: ", X_test.shape)
@@ -85,6 +87,7 @@ def main(args):
         eval_group=[group_train, group_val],
         verbose=True
     )
+    print("#" * 80)
     print("Creating test results...")
     train_scores = model.predict(X_val)
     test_scores = model.predict(X_test)
