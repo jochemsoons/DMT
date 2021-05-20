@@ -6,12 +6,14 @@ import datetime
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn import preprocessing
+import time
 # import torch
 # from LambdaRankNN import LambdaRankNN
 # import xgboost as xgb
 import lightgbm
 
-
+from LambdaRank import *
+from EDA_plots import *
 from preprocessing import *
 from utils import *
 
@@ -41,12 +43,16 @@ def main(args):
         except:
             df_train, df_test = load_data()
         # Print statistics of train dataset.
-        # df_train = df_train
-        # df_test = df_test
+        # df_train = df_train[:5000]
+        # df_test = df_test[:5000]
+        if args.plot_EDA:
+            plot_missing_values(df_train, 'train')
+            gc.collect()
+            plot_missing_values(df_test, 'test')
+            
         if 'score' not in df_train.columns:
             add_score_column(df_train)
-            pdump(df_train,'df_train') 
-
+            pdump(df_train,'df_train')
         print("Preprocessing datasets...")
         preprocess_data(df_train), preprocess_data(df_test)
         if args.add_proba_features:
@@ -55,8 +61,9 @@ def main(args):
             add_statistics_num_features(df_train, df_test)
         if args.add_comp_features:
             add_composite_features(df_train, df_test)
-        X_train, y_train, qids_train, X_val, y_val, qids_val = create_train_val_data(df_train)
-        X_test, qids_test, prop_ids_test = create_test_data(df_test)
+        
+        X_train, y_train, qids_train, X_val, y_val, qids_val, categorical_numbers = create_train_val_data(df_train)
+        X_test, qids_test, prop_ids_test, categorical_numbers = create_test_data(df_test)
 
     elif args.load_subsets:
         print("Loading subsets...")
@@ -72,24 +79,61 @@ def main(args):
 
     _, group_train = np.unique(qids_train, return_counts=True)
     _, group_val = np.unique(qids_val, return_counts=True)
-    
-    print("Initializing model...")
-    model = lightgbm.LGBMRanker(
-        boosting_type='gbdt',
-        random_state=args.seed
-    )
-    print("Training model...")
-    model.fit(
-        X_train, 
-        y_train, 
-        group=group_train, 
-        eval_set=[(X_train, y_train), (X_val, y_val)],
-        eval_group=[group_train, group_val],
-        verbose=True
-    )
-    print("#" * 80)
+    if args.standardize:
+        X_train, X_val, X_test = standardize_data(X_train, X_val, X_test)
+
+    if args.model == 'boost_tree':
+        print("Initializing tree-based model...")
+        # model = lightgbm.LGBMRanker(
+        #     boosting_type='gbdt',
+        #     random_state=args.seed
+        # )
+        # print("Training model...")
+        # model.fit(
+        #     X_train, 
+        #     y_train, 
+        #     group=group_train, 
+        #     eval_set=[(X_train, y_train), (X_val, y_val)],
+        #     eval_group=[group_train, group_val],
+        #     verbose=10
+        # )
+        model = lightgbm.LGBMRanker(
+            objective="lambdarank",
+            metric="ndcg",
+            n_estimators=5000,
+            learning_rate=0.12,
+            # bagging_fraction=0.75,
+            max_position=5,
+            # label_gain=[0, 1, 5],
+            random_state=args.seed,
+            boosting_type='dart',
+        )
+        gc.collect()
+
+        model.fit(
+            X_train,
+            y_train,
+            group=group_train, 
+            eval_set=[(X_train, y_train), (X_val, y_val)],
+            eval_group=[group_train, group_val],
+            verbose=20,
+            eval_at=5,
+            early_stopping_rounds=1000,
+            categorical_feature=categorical_numbers,
+        )
+    elif args.model == 'lambdarank':
+        print("=============== Start of training LTR model ===============", flush=True)
+        model = LambdaRankNN(input_size=X_train.shape[1], 
+                        hidden_layer_sizes=(128, 256), 
+                        activation=('relu', 'relu'), 
+                        solver='adam')
+
+        model.fit(X_train, y_train, qids_train, epochs=5)
+        print("Now starting Evaluation", flush=True)
+        model.evaluate(X_val, y_val, qids_val, eval_at=5)
+        print("#" * 80)
+
     print("Creating test results...")
-    train_scores = model.predict(X_val)
     test_scores = model.predict(X_test)
     test_df = pd.DataFrame(columns=['prop_id','srch_id','score'])
     test_df['prop_id'] = prop_ids_test
@@ -101,13 +145,17 @@ def main(args):
     print("Saving predictions into submission.csv")
     if not os.path.exists('./submission/'):
         os.makedirs('./submission/')
-    test_df[["srch_id", "prop_id"]].to_csv(os.path.join("./submission/submission.csv"), index=False)
+    timestr = time.strftime("%Y_%m_%d-%H_%M_%S")
+    test_df[["srch_id", "prop_id"]].to_csv(os.path.join("./submission/submission_{}_{}.csv".format(args.model, timestr)), index=False)
     return
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=None, help='Random seed for reproducability')
+    parser.add_argument('--model', type=str, default='boost_tree', help='Model used for training')
+    parser.add_argument('--plot_EDA', action='store_true')
     parser.add_argument('--load_subsets', action='store_true')
+    parser.add_argument('--standardize', action='store_true')
     parser.add_argument('--add_stats_features', action='store_true')
     parser.add_argument('--add_proba_features', action='store_true')
     parser.add_argument('--add_comp_features', action='store_true')
