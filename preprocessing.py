@@ -18,15 +18,6 @@ def load_data(dirname='data/'):
     pdump(df_test, 'df_test')
     return df_train, df_test
 
-def print_statistics(df):
-    print('variables', df.columns)
-    print('shape of dataframe', df.shape)
-    print('# of logs', len(df))
-    print('# of not clicked', len(df.loc[(df['click_bool']==0)]))
-    print('# of clicked', len(df.loc[(df['click_bool']==1)]))
-    print('# of clicked and not booked', len(df.loc[(df['click_bool']==1) & (df['booking_bool']==0)]))
-    print('# of clicked and booked', len(df.loc[(df['click_bool']==1) & (df['booking_bool']==1)]))
-
 def add_score_column(df):
     print("Adding score (label) column...")
     labels = np.zeros((df.shape[0])) 
@@ -37,16 +28,28 @@ def add_score_column(df):
     df['score'][mask_click] = 1
     return df
 
+def add_position_features(df_train, df_test):
+    print("Adding mean and median of position feature...")
+    df_position = df_train.loc[df_train['random_bool'] == 0]
+    df_position = df_position[["prop_id", "position"]]
+    df_position["position_mean"] = 1 / df_position.groupby("prop_id")['position'].transform('mean')
+    df_position["position_median"] = 1 / df_position.groupby("prop_id")['position'].transform('median')
+    df_position["position_std"] = df_position.groupby("prop_id")['position'].transform('std')
+    df_position.drop(['position'], axis=1, inplace=True)
+    df_position = df_position.drop_duplicates()
+    df_train = pd.merge(df_train, df_position, on='prop_id', how='left')
+    df_test = pd.merge(df_test, df_position, on='prop_id', how='left')
+    return df_train, df_test
+    
 def add_statistics_num_features(df_train, df_test):
     print("Adding mean, median and std for numeric features...")
     combined_data = pd.concat([df_train, df_test], copy=False)
-    numeric_features = ["position", "prop_starrating", "prop_review_score", "prop_location_score1", "prop_location_score2"]
+    numeric_features = ["prop_starrating", "prop_review_score", "prop_location_score1", "prop_location_score2"]
     print("Numeric features used:", numeric_features)
     for feature in numeric_features:
         mean = combined_data.groupby("prop_id")[feature].mean().fillna(value=-1)
         median = combined_data.groupby("prop_id")[feature].median().fillna(value=-1)
         std = combined_data.groupby("prop_id")[feature].std().fillna(value=-1)
-
         for df in (df_train, df_test):
             df[feature + "_mean"] = mean[df.prop_id].values
             df[feature + "_median"] = median[df.prop_id].values
@@ -55,33 +58,32 @@ def add_statistics_num_features(df_train, df_test):
 
 def add_probability_features(df_train, df_test):
     print("Adding booking and click probability features...")
-    df_train['book_probability'] = df_train.groupby("prop_id")['booking_bool'].transform('sum') / df_train.groupby("prop_id")['prop_id'].transform('count')
-    df_train['click_probability'] = df_train.groupby("prop_id")['click_bool'].transform('sum') / df_train.groupby("prop_id")['prop_id'].transform('count')
+    df_ordered = df_train[["prop_id", "random_bool", "click_bool"]]
+    df_ordered = df_ordered.loc[df_ordered['random_bool'] == 0]
+    df_ordered["click_probability"] = df_ordered.groupby("prop_id")['click_bool'].transform('sum') / df_train.groupby("prop_id")['prop_id'].transform('count')
+    df_ordered.drop(['random_bool', 'click_bool'], axis=1, inplace=True)
     
+    df_train['book_probability'] = df_train.groupby("prop_id")['booking_bool'].transform('sum') / df_train.groupby("prop_id")['prop_id'].transform('count')
+    df_train = pd.merge(df_train, df_ordered.drop_duplicates(), on='prop_id', how='left')
     train_book_prob = df_train[["prop_id", "book_probability"]].drop_duplicates()
     train_click_prob = df_train[["prop_id", "click_probability"]].drop_duplicates()
-  
-    df_test = pd.merge(df_test, train_book_prob, on='prop_id', how='left')
-    df_test = pd.merge(df_test, train_click_prob, on='prop_id', how='left')
-    
     mean_book_prob = train_book_prob['book_probability'].mean()
     mean_click_prob = train_click_prob['click_probability'].mean()
+    df_train.book_probability.fillna(mean_book_prob, inplace = True)
+    df_train.click_probability.fillna(mean_click_prob, inplace = True)
+
+    df_test = pd.merge(df_test, train_book_prob, on='prop_id', how='left')
+    df_test = pd.merge(df_test, train_click_prob, on='prop_id', how='left')
     df_test.book_probability.fillna(mean_book_prob, inplace = True)
     df_test.click_probability.fillna(mean_click_prob, inplace = True)
     return df_train, df_test
-    # test_prop_ids = np.array(df_test['prop_id'])
-    # train_prop_ids = np.array(df_train['prop_id'])       
-    # common_ids = np.intersect1d(test_prop_ids, train_prop_ids)
-    # df_test['book_probability'] = [df_train.loc[(df_train['prop_id']==p_id)].book_probability.iloc[0] if p_id in common_ids else 0 for p_id in test_prop_ids]
-    # df_test['click_probability'] = [df_train.loc[(df_train['prop_id']==p_id)].click_probability.iloc[0] if p_id in common_ids else 0 for p_id in test_prop_ids]
-    # return df_train, df_test
 
 def add_composite_features(df_train, df_test):
     for df in (df_train, df_test):
         df['starrating_diff'] = abs(df['visitor_hist_starrating'] - df['prop_starrating'])
-        df['usd_diff'] = abs(df["visitor_hist_adr_usd"] - df["price_usd"])
+        df['usd_diff'] = (df["visitor_hist_adr_usd"] - df["price_usd"])
         df['star_review_diff'] = abs(df["prop_review_score"] - df["prop_starrating"])
-        df['price_order'] = df.groupby("srch_id")["price_usd"].rank("dense")
+        df['price_order'] = 1 / df.groupby("srch_id")["price_usd"].rank("dense")
         hist_price_normal = np.exp(df['prop_log_historical_price'])
         df['price_diff_recent'] = abs(df['price_usd'] - hist_price_normal)
     return df_train, df_test
@@ -114,27 +116,21 @@ def preprocess_data(df):
     add_date_features(df)
     to_drop = [
         'date_time',
-        'site_id',
-        'visitor_location_country_id',
-        # 'visitor_hist_adr_usd',
-        'prop_country_id',
-        #'prop_id',
-        # 'prop_brand_bool',
-        #'promotion_flag',
-        # 'srch_destination_id',
-        #'random_bool',
+        # 'site_id',
+        # 'visitor_location_country_id',
+        # 'prop_country_id',
     ]
     # Remove columns
     df.drop(to_drop, axis=1, inplace=True)
     # Winsorize price values
     # print('max before:', np.max(df['price_usd'] ))
-    df['price_usd'] = winsorize(df['price_usd'], (None, 0.04))
+    df['price_usd'] = winsorize(df['price_usd'], (None, 0.03))
     # print('max after:', np.max(df['price_usd'] ))
     # treatment for missing values
     # Replace NULL with -10 in place
     df.orig_destination_distance.fillna(-1, inplace=True)
-    df.visitor_hist_starrating.fillna(-1, inplace=True)
-    df.visitor_hist_adr_usd.fillna(-1, inplace=True)
+    df.visitor_hist_starrating.fillna(df.visitor_hist_starrating.mean(), inplace=True)
+    df.visitor_hist_adr_usd.fillna(df.visitor_hist_adr_usd.mean(), inplace=True)
     df.prop_review_score.fillna(-1, inplace=True)
 
     # Replace a value less than the minimum of training + test data
@@ -146,10 +142,13 @@ def preprocess_data(df):
         rate = 'comp' + str(i) + '_rate'
         inv = 'comp' + str(i) + '_inv'
         diff = 'comp' + str(i) + '_rate_percent_diff'
-        # df[rate].fillna(0, inplace = True)
-        # df[inv].fillna(0, inplace = True)
-        # df[diff].fillna(0, inplace = True)
-        df.drop([rate, inv, diff], axis=1, inplace=True)
+        if rate in df.columns:
+            df[rate].fillna(0, inplace = True)
+        if inv in df.columns:
+            df[inv].fillna(0, inplace = True)
+        if diff in df.columns:
+            df[diff].fillna(0, inplace = True)
+        # df.drop([rate, inv, diff], axis=1, inplace=True)
     return df
 
 def split_df(df, subset):
@@ -158,17 +157,19 @@ def split_df(df, subset):
     # df.drop(['srch_id'], axis=1, inplace = True)
     if subset == 'train':
         labels = df['score']
-        df.drop(['score', 'booking_bool','click_bool', 'position','gross_bookings_usd'], axis = 1, inplace = True)
+        df.drop(['score', 'booking_bool','click_bool', 'position', 'gross_bookings_usd'], axis = 1, inplace = True)
         df.drop(['prop_id'], axis = 1, inplace = True)
+        df.drop(['srch_id'], axis = 1, inplace = True)
         categorical_numbers = get_categorical_column(df)
-        return np.asarray(df, dtype=np.float64), np.asarray(labels, dtype=np.int64), np.asarray(qids, dtype=np.int64), categorical_numbers
+        return np.asarray(df, dtype=np.float64), np.asarray(labels, dtype=np.int64), np.asarray(qids, dtype=np.int64), categorical_numbers, df.columns
     else:
         prop_ids = df['prop_id']
         df.drop(['prop_id'], axis = 1, inplace = True)
+        df.drop(['srch_id'], axis = 1, inplace = True)
         categorical_numbers = get_categorical_column(df)
         return np.asarray(df, dtype=np.float64), np.asarray(qids, dtype=np.int64), np.asarray(prop_ids, dtype=np.int64), categorical_numbers
 
-def create_train_val_data(df, split_ratio=0.80):
+def create_train_val_data(df, split_ratio=0.85):
     srch_ids = df['srch_id'].unique()
     random.shuffle(srch_ids)
     split_index = round(split_ratio * len(srch_ids))
@@ -178,9 +179,9 @@ def create_train_val_data(df, split_ratio=0.80):
     val_df = df.loc[df['srch_id'].isin(val_ids)]
 
     print("Splitting into X, y and qids...")
-    X_train, y_train, qids_train, categorical_numbers = split_df(train_df, subset='train')
-    X_val, y_val, qids_val, categorical_numbers = split_df(val_df, subset='train')
-
+    X_train, y_train, qids_train, categorical_numbers, col_names = split_df(train_df, subset='train')
+    X_val, y_val, qids_val, categorical_numbers, _ = split_df(val_df, subset='train')
+    gc.collect()
     pdump(X_train, 'X_train')
     pdump(X_val, 'X_val')
     pdump(y_train, 'y_train')
@@ -188,13 +189,14 @@ def create_train_val_data(df, split_ratio=0.80):
     pdump(qids_train, 'qids_train')
     pdump(qids_val, 'qids_val')
 
-    return X_train, y_train, qids_train, X_val, y_val, qids_val, categorical_numbers
+    return X_train, y_train, qids_train, X_val, y_val, qids_val, categorical_numbers, list(col_names)
 
 def create_test_data(df):
     X_test, qids_test, prop_ids_test, categorical_numbers = split_df(df, subset='test')
-    pdump(X_test, 'X_test')
-    pdump(qids_test, 'qids_test')
-    pdump(prop_ids_test, 'prop_ids_test')
+    gc.collect()
+    # pdump(X_test, 'X_test')
+    # pdump(qids_test, 'qids_test')
+    # pdump(prop_ids_test, 'prop_ids_test')
     return X_test, qids_test, prop_ids_test, categorical_numbers
 
 def standardize_data(X_train, X_val, X_test):

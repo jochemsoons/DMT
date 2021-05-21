@@ -1,6 +1,8 @@
 ./vscode
 ./.ipynb_checkpoints
 ./__pycache__
+./job_results
+./train_plots
 
 *.csv
 *.pkl

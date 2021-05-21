@@ -29,6 +29,7 @@ def print_flags(args):
     return
 
 def main(args):
+    gc.collect()
     # Print all Flags to confirm parameter settings.
     print_flags(args)
     # Set seed for reproducability.
@@ -42,14 +43,20 @@ def main(args):
             df_test = pload('df_test')
         except:
             df_train, df_test = load_data()
-        # Print statistics of train dataset.
-        # df_train = df_train[:5000]
-        # df_test = df_test[:5000]
+        # df_train = df_train[:10000]
+        # df_test = df_test[:10000]
         if args.plot_EDA:
-            plot_missing_values(df_train, 'train')
-            gc.collect()
-            plot_missing_values(df_test, 'test')
-            
+            print_statistics(df_train, df_test)
+            # plot_missing_values(df_train, 'train')
+            # plot_missing_values(df_test, 'test')
+            # create_price_boxplot(df_train)
+            # create_dist_boxplot(df_train)
+            # create_numerical_boxplot(df_train, boxplot_cols=[], name='numerical')
+            # create_rating_boxplot(df_train, boxplot_cols=[], name='rating')
+            # create_date_plot(df_train, df_test)
+            # create_boolean_plot(df_train)
+            # create_position_bias_plot(df_train)
+            exit()
         if 'score' not in df_train.columns:
             add_score_column(df_train)
             pdump(df_train,'df_train')
@@ -57,17 +64,24 @@ def main(args):
         preprocess_data(df_train), preprocess_data(df_test)
         if args.add_proba_features:
             df_train, df_test = add_probability_features(df_train, df_test)
+            gc.collect()
         if args.add_stats_features:
+            add_position_features(df_train, df_test)
             add_statistics_num_features(df_train, df_test)
+            gc.collect()
         if args.add_comp_features:
             add_composite_features(df_train, df_test)
+            gc.collect()
         
-        X_train, y_train, qids_train, X_val, y_val, qids_val, categorical_numbers = create_train_val_data(df_train)
+        X_train, y_train, qids_train, X_val, y_val, qids_val, categorical_numbers, col_names = create_train_val_data(df_train)
+        gc.collect()
         X_test, qids_test, prop_ids_test, categorical_numbers = create_test_data(df_test)
+        gc.collect()
 
     elif args.load_subsets:
         print("Loading subsets...")
         X_train, y_train, qids_train, X_val, y_val, qids_val = load_subsets()
+        categorical_numbers = None
         X_test = pload('X_test')
         qids_test = pload('qids_test')
         prop_ids_test = pload('prop_ids_test')      
@@ -84,24 +98,11 @@ def main(args):
 
     if args.model == 'boost_tree':
         print("Initializing tree-based model...")
-        # model = lightgbm.LGBMRanker(
-        #     boosting_type='gbdt',
-        #     random_state=args.seed
-        # )
-        # print("Training model...")
-        # model.fit(
-        #     X_train, 
-        #     y_train, 
-        #     group=group_train, 
-        #     eval_set=[(X_train, y_train), (X_val, y_val)],
-        #     eval_group=[group_train, group_val],
-        #     verbose=10
-        # )
         model = lightgbm.LGBMRanker(
             objective="lambdarank",
             metric="ndcg",
-            n_estimators=5000,
-            learning_rate=0.12,
+            n_estimators=2000,
+            learning_rate=0.10,
             # bagging_fraction=0.75,
             max_position=5,
             # label_gain=[0, 1, 5],
@@ -116,11 +117,16 @@ def main(args):
             group=group_train, 
             eval_set=[(X_train, y_train), (X_val, y_val)],
             eval_group=[group_train, group_val],
-            verbose=20,
+            eval_names=['Training set', 'Validation set'],
+            feature_name=col_names,
+            verbose=100,
             eval_at=5,
-            early_stopping_rounds=1000,
+            early_stopping_rounds=500,
             categorical_feature=categorical_numbers,
         )
+        plot_training(model)
+        plot_importance(model)
+
     elif args.model == 'lambdarank':
         print("=============== Start of training LTR model ===============", flush=True)
         model = LambdaRankNN(input_size=X_train.shape[1], 
@@ -135,6 +141,7 @@ def main(args):
 
     print("Creating test results...")
     test_scores = model.predict(X_test)
+
     test_df = pd.DataFrame(columns=['prop_id','srch_id','score'])
     test_df['prop_id'] = prop_ids_test
     test_df['srch_id'] = qids_test

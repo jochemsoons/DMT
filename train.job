@@ -23,4 +23,4 @@ cd $HOME/DMT
 source activate DMT_3
 # Run your code
 # srun python -u main.py --model lambdarank --seed 42 --add_proba_features --add_stats_features --add_comp_features --standardize
-srun python -u main.py --model boost_tree --seed 42 --add_proba_features --add_stats_features --add_comp_features
+srun python -u main.py --seed 42 --model boost_tree --add_stats_features --add_comp_features 
