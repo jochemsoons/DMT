@@ -38,7 +38,7 @@ def create_price_boxplot(df, name='price', dirname='./EDA_plots/'):
 
     val_col = df['price_usd'].dropna(axis=0)
 
-    plt.figure()
+    plt.figure(figsize=(4,4))
     plt.boxplot(val_col)
     # ax.set_xticklabels(values_dict.keys())
     plt.title('Boxplot of price values')
@@ -54,10 +54,10 @@ def create_dist_boxplot(df, name='distance', dirname='./EDA_plots/'):
 
     val_col = df['orig_destination_distance'].dropna(axis=0)
 
-    plt.figure()
+    plt.figure(figsize=(4,4))
     plt.boxplot(val_col)
     # ax.set_xticklabels(values_dict.keys())
-    plt.title('Boxplot of hotel-customer distance values')
+    plt.title('Boxplot of distance values')
 
     plt.ylabel('Distance between hotel and customer')
     plt.xlabel('Attribute orig_destination_distance')
@@ -90,7 +90,7 @@ def create_numerical_boxplot(df, boxplot_cols, name='numerical', dirname='./EDA_
         val_col = df[col].dropna(axis=0)
         values_dict[col] = val_col
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(4,4))
     ax.boxplot(values_dict.values())
     ax.set_xticklabels(values_dict.keys())
     ax.set_title('Boxplot of numerical attribute values')
@@ -126,13 +126,13 @@ def create_rating_boxplot(df, boxplot_cols, name='rating', dirname='./EDA_plots/
         val_col = df[col].dropna(axis=0)
         values_dict[col] = val_col
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(7,4))
     ax.boxplot(values_dict.values())
     ax.set_xticklabels(values_dict.keys())
     ax.set_title('Boxplot of rating attribute values')
     ax.set_ylabel('Value')
     ax.set_xlabel('Attributes')
-    plt.xticks(rotation=90)
+    # plt.xticks(rotation=90)
     plt.tight_layout()
     plt.savefig(dirname + 'boxplot_{}.png'.format(name))
 
@@ -229,7 +229,7 @@ def create_boolean_plot(df, dirname='./EDA_plots/'):
     x = np.arange(len(boolean_cols))  # the label locations
     width = 0.35 # the width of the bars
 
-    fig, ax = plt.subplots(figsize=(8,4))
+    fig, ax = plt.subplots(figsize=(7,4))
 
     rects1 = ax.bar(x - width/2, neg_bool_ratios, width, label='Bool=0')
     rects2 = ax.bar(x + width/2, pos_bool_ratios, width, label='Bool=1')
